@@ -2,13 +2,15 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AuthPage from './AuthPage';
 import DashboardPage from './DashboardPage';
-import ProtectedRoute from './ProtectedRoute'; // Importa el componente
+import ProtectedRoute from './ProtectedRoute';
+import JudgeInvitationPage from './JudgeInvitationPage';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/invitacion/:token" element={<JudgeInvitationPage />} /> {/* <-- Añade la nueva ruta */}
         
         {/* Rutas Protegidas */}
         <Route element={<ProtectedRoute />}>
