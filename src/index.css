@@ -1,0 +1,21 @@
+/* src/index.css */
+:root {
+  --background-dark: #111827; /* Gris oscuro casi negro */
+  --background-light: #1F2937; /* Gris un poco más claro para las tarjetas */
+  --border-color: #374151;   /* Color para los bordes */
+  --text-primary: #F3F4F6;     /* Texto principal (blanco hueso) */
+  --text-secondary: #9CA3AF;  /* Texto secundario (gris claro) */
+  --accent-primary: #6366F1;   /* Color de acento (índigo) */
+  --accent-hover: #4F46E5;     /* Acento para el hover */
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--background-dark);
+  color: var(--text-primary);
+}
