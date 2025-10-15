@@ -2,8 +2,10 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { useNavigate } from 'react-router-dom';
+import { QRCodeSVG } from 'qrcode.react';
 import styles from './DashboardPage.module.css';
 import Modal from './Modal';
+import DropdownMenu from './DropdownMenu';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -16,9 +18,11 @@ export default function DashboardPage() {
 
   // Estados para el Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeModalTab, setActiveModalTab] = useState('createVote');
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   
-  // Estados para los formularios
+  // Estados para Menú y Formularios
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const [activeModalTab, setActiveModalTab] = useState('createVote');
   const [voteTitle, setVoteTitle] = useState('');
   const [studentPresenter, setStudentPresenter] = useState('');
   const [voteDuration, setVoteDuration] = useState(60);
@@ -47,13 +51,56 @@ export default function DashboardPage() {
     };
     fetchInitialData();
   }, [navigate]);
+
+  const handleRenameEvent = async (eventId, currentName) => {
+    setOpenMenuId(null);
+    const newName = prompt('Ingresa el nuevo nombre para la sala:', currentName);
+    if (newName && newName !== currentName) {
+      const { data, error } = await supabase
+        .from('events')
+        .update({ name: newName })
+        .eq('id', eventId)
+        .select()
+        .single();
+      
+      if (error) {
+        alert('Error al renombrar la sala.');
+      } else {
+        setEvents(events.map(e => (e.id === eventId ? data : e)));
+        if (selectedEvent?.id === eventId) {
+          setSelectedEvent(data);
+        }
+      }
+    }
+  };
+
+  const handleShareEvent = (event) => {
+    setOpenMenuId(null);
+    setSelectedEvent(event);
+    setIsShareModalOpen(true);
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    setOpenMenuId(null);
+    if (window.confirm('¿Estás seguro de que quieres eliminar esta sala? Todas sus votaciones se borrarán.')) {
+      const { error } = await supabase.from('events').delete().eq('id', eventId);
+      
+      if (error) {
+        alert('Error al eliminar la sala.');
+      } else {
+        setEvents(events.filter(e => e.id !== eventId));
+        if (selectedEvent?.id === eventId) {
+          setSelectedEvent(null);
+          setVotes([]);
+        }
+      }
+    }
+  };
   
   const handleSelectEvent = async (event) => {
     setSelectedEvent(event);
-    // Cargar votaciones
     const { data: votesData } = await supabase.from('votes').select('*').eq('event_id', event.id);
     setVotes(votesData || []);
-    // Cargar jueces
     const { data: judgesData } = await supabase.from('judges').select('*').eq('admin_id', user.id);
     setJudges(judgesData || []);
   };
@@ -95,7 +142,6 @@ export default function DashboardPage() {
       alert('¡Votación creada con éxito!');
       setVotes([voteData, ...votes]);
       setIsModalOpen(false);
-      // Limpiar formulario
       setVoteTitle('');
       setStudentPresenter('');
       setVoteDuration(60);
@@ -127,7 +173,7 @@ export default function DashboardPage() {
     }
   };
 
-const handleEditJudge = async (judgeId, currentName) => {
+  const handleEditJudge = async (judgeId, currentName) => {
     const newName = prompt('Edita el nombre del juez:', currentName);
     if (newName && newName !== currentName) {
       const { data, error } = await supabase
@@ -140,13 +186,12 @@ const handleEditJudge = async (judgeId, currentName) => {
       if (error) {
         alert('Error al actualizar el juez.');
       } else {
-        // Actualizamos la lista de jueces en el estado local
         setJudges(judges.map(j => (j.id === judgeId ? data : j)));
       }
     }
-};
+  };
 
-const handleDeleteJudge = async (judgeId) => {
+  const handleDeleteJudge = async (judgeId) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar a este juez? Esta acción no se puede deshacer.')) {
       const { error } = await supabase.from('judges').delete().eq('id', judgeId);
       
@@ -154,11 +199,10 @@ const handleDeleteJudge = async (judgeId) => {
         alert('Error al eliminar el juez. Es posible que esté asignado a una votación.');
         console.error(error);
       } else {
-        // Eliminamos al juez de la lista en el estado local
         setJudges(judges.filter(j => j.id !== judgeId));
       }
     }
-};
+  };
 
   const handleJudgeSelection = (judgeId) => {
     setSelectedJudges(prev => {
@@ -197,13 +241,32 @@ const handleDeleteJudge = async (judgeId) => {
 
         <ul className={styles.eventList}>
           {events.map(event => (
-            <li key={event.id} className={styles.eventItem}>
+            <li 
+              key={event.id} 
+              className={`${styles.eventItem} ${selectedEvent?.id === event.id ? styles.active : ''}`}
+            >
               <button
                 onClick={() => handleSelectEvent(event)}
-                className={selectedEvent?.id === event.id ? styles.active : ''}
+                className={styles.eventItemContent}
               >
-                {event.name}
+                <span className={styles.eventName}>{event.name}</span>
               </button>
+              <button
+                className={styles.optionsButton}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMenuId(openMenuId === event.id ? null : event.id);
+                }}
+              >
+                ⋮
+              </button>
+              {openMenuId === event.id && (
+                <DropdownMenu>
+                  <button onClick={() => handleRenameEvent(event.id, event.name)}>Renombrar</button>
+                  <button onClick={() => handleShareEvent(event)}>Compartir</button>
+                  <button onClick={() => handleDeleteEvent(event.id)} style={{ color: '#F87171' }}>Eliminar</button>
+                </DropdownMenu>
+              )}
             </li>
           ))}
         </ul>
@@ -296,30 +359,50 @@ const handleDeleteJudge = async (judgeId) => {
         )}
 
         {activeModalTab === 'manageJudges' && (
-      <div>
-        <form onSubmit={handleInviteJudge} className={styles.form}>
-          <h3>Invitar Juez</h3>
-          <div className={styles.inputGroup}>
-            <label>Nombre del Juez</label>
-            <input type="text" value={judgeName} onChange={e => setJudgeName(e.target.value)} required />
-          </div>
-          <button type="submit" className={styles.submitButton}>Generar Link de Invitación</button>
-        </form>
-        <hr style={{borderColor: 'var(--border-color)', margin: '1.5rem 0'}}/>
-        <h4>Jueces en esta Sala</h4>
-        <ul className={styles.judgeList}>
-          {judges.map(j => (
-            <li key={j.id} className={styles.judgeListItem}>
-              <span>{j.name}</span>
-              <div className={styles.judgeActions}>
-                <button onClick={() => handleEditJudge(j.id, j.name)}>✏️ Editar</button>
-                <button onClick={() => handleDeleteJudge(j.id)}>🗑️ Borrar</button>
+          <div>
+            <form onSubmit={handleInviteJudge} className={styles.form}>
+              <h3>Invitar Juez</h3>
+              <div className={styles.inputGroup}>
+                <label>Nombre del Juez</label>
+                <input type="text" value={judgeName} onChange={e => setJudgeName(e.target.value)} required />
               </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-    )}
+              <button type="submit" className={styles.submitButton}>Generar Link de Invitación</button>
+            </form>
+            <hr style={{borderColor: 'var(--border-color)', margin: '1.5rem 0'}}/>
+            <h4>Jueces en esta Sala</h4>
+            <ul className={styles.judgeList}>
+              {judges.map(j => (
+                <li key={j.id} className={styles.judgeListItem}>
+                  <span>{j.name}</span>
+                  <div className={styles.judgeActions}>
+                    <button onClick={() => handleEditJudge(j.id, j.name)}>✏️ Editar</button>
+                    <button onClick={() => handleDeleteJudge(j.id)}>🗑️ Borrar</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Modal>
+
+      <Modal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)}>
+        {selectedEvent && (
+          <div style={{ textAlign: 'center' }}>
+            <h3>Compartir Sala: {selectedEvent.name}</h3>
+            <p>Los participantes pueden escanear este código para unirse.</p>
+            <div style={{ background: 'white', padding: '1rem', display: 'inline-block', margin: '1rem 0' }}>
+              <QRCodeSVG value={`${window.location.origin}/sala/${selectedEvent.id}`} size={200} />
+            </div>
+            <p>O comparte este enlace:</p>
+            <input
+              type="text"
+              readOnly
+              value={`${window.location.origin}/sala/${selectedEvent.id}`}
+              style={{ width: '100%', padding: '0.5rem', backgroundColor: 'var(--background-dark)', border: '1px solid var(--border-color)', color: 'white', borderRadius: '4px' }}
+              onClick={(e) => e.target.select()}
+            />
+          </div>
+        )}
       </Modal>
     </div>
   );
