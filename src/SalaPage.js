@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import styles from './SalaPage.module.css';
+import VoteCard from './VoteCard';
 
 export default function SalaPage() {
   const { eventId } = useParams();
@@ -36,7 +37,6 @@ export default function SalaPage() {
         console.log('📡 Iniciando fetch de datos...');
         
         // 1. Obtener el nombre de la sala
-        console.log('📡 Buscando evento con ID:', eventId);
         const { data: eventData, error: eventError } = await supabase
           .from('events')
           .select('name')
@@ -54,9 +54,6 @@ export default function SalaPage() {
         setEventName(eventData.name);
 
         // 2. Obtener las votaciones de esa sala
-        console.log('📡 Buscando votaciones para event_id:', eventId);
-        
-        // PRUEBA 1: Query simple
         const { data: votesData, error: votesError } = await supabase
           .from('votes')
           .select('*')
@@ -70,14 +67,13 @@ export default function SalaPage() {
 
         if (votesError) {
           console.error('❌ Error al cargar votaciones:', votesError);
-          console.error('Error details:', JSON.stringify(votesError, null, 2));
           setError(`No se pudieron cargar las votaciones: ${votesError.message}`);
         } else if (!votesData || votesData.length === 0) {
           console.warn('⚠️ No se encontraron votaciones para este evento');
           setVotes([]);
         } else {
           console.log('✅ Votaciones cargadas exitosamente:', votesData);
-          // Ordenar en el cliente para evitar problemas
+          // Ordenar por fecha de creación
           const sortedVotes = votesData.sort((a, b) => 
             new Date(a.created_at) - new Date(b.created_at)
           );
@@ -109,7 +105,9 @@ export default function SalaPage() {
           console.log('🔔 Cambio en tiempo real recibido:', payload);
           
           if (payload.eventType === 'INSERT') {
-            setVotes(current => [...current, payload.new]);
+            setVotes(current => [...current, payload.new].sort((a, b) => 
+              new Date(a.created_at) - new Date(b.created_at)
+            ));
           } else if (payload.eventType === 'UPDATE') {
             setVotes(current => 
               current.map(vote => vote.id === payload.new.id ? payload.new : vote)
@@ -131,13 +129,6 @@ export default function SalaPage() {
     };
 
   }, [eventId]);
-
-  const handleVote = (voteId, score) => {
-    console.log('🗳️ Votando:', { voteId, score });
-    alert(`Has votado ${score} en la votación ${voteId}`);
-  };
-
-  console.log('🎨 Renderizando componente:', { loading, error, votesCount: votes.length });
 
   if (loading) {
     return (
@@ -175,34 +166,7 @@ export default function SalaPage() {
       ) : (
         <main className={styles.voteList}>
           {votes.map((vote) => (
-            <div key={vote.id} className={`${styles.voteCard} ${styles[vote.status]}`}>
-              <div className={styles.voteInfo}>
-                <h3>{vote.title}</h3>
-                <p>Presentado por: {vote.student_presenter || 'N/A'}</p>
-                <p style={{ fontSize: '0.875rem', color: '#64748b' }}>
-                  Estado: {vote.status}
-                </p>
-              </div>
-              <div className={styles.voteAction}>
-                {vote.status === 'pending' && (
-                  <span className={styles.statusBadge}>Próximamente</span>
-                )}
-                {vote.status === 'finished' && (
-                  <span className={styles.statusBadge}>Finalizada</span>
-                )}
-                {vote.status === 'active' && (
-                  <div className={styles.votingArea}>
-                    <p>¡Votación Abierta!</p>
-                    <button 
-                      onClick={() => handleVote(vote.id, 10)} 
-                      className={styles.voteButton}
-                    >
-                      Votar
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
+            <VoteCard key={vote.id} vote={vote} />
           ))}
         </main>
       )}

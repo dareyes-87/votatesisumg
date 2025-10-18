@@ -228,6 +228,28 @@ export default function DashboardPage() {
     }
   };
 
+  // --- ¡NUEVA FUNCIÓN! ---
+  const handleActivateVote = async (voteId) => {
+    // 1. Cambiar el estado a 'active' en la base de datos
+    const { data, error } = await supabase
+      .from('votes')
+      .update({ status: 'active' })
+      .eq('id', voteId)
+      .select()
+      .single();
+    
+    if (error) {
+      alert('Error al activar la votación.');
+      return;
+    }
+
+    // 2. Actualizar el estado local para que la UI del admin se refresque
+    setVotes(currentVotes =>
+      currentVotes.map(vote => (vote.id === voteId ? data : vote))
+    );
+  };
+  // --- FIN DE LA NUEVA FUNCIÓN ---
+
   if (loading) return <div>Cargando panel...</div>;
 
   return (
@@ -243,13 +265,13 @@ export default function DashboardPage() {
           {events.map(event => (
             <li 
               key={event.id} 
-              className={`${styles.eventItem} ${selectedEvent?.id === event.id ? styles.active : ''}`}
+              className={styles.eventItem}
             >
               <button
                 onClick={() => handleSelectEvent(event)}
-                className={styles.eventItemContent}
+                className={`${styles.eventItemContent} ${selectedEvent?.id === event.id ? styles.active : ''}`}
               >
-                <span className={styles.eventName}>{event.name}</span>
+                {event.name}
               </button>
               <button
                 className={styles.optionsButton}
@@ -289,6 +311,18 @@ export default function DashboardPage() {
                     <h3>{vote.title}</h3>
                     <p>Presentado por: {vote.student_presenter || 'N/A'}</p>
                     <p>Estado: {vote.status}</p>
+                    
+                    {/* --- ¡BOTÓN DE ACTIVAR AÑADIDO AQUÍ! --- */}
+                    {vote.status === 'pending' && (
+                      <button 
+                        onClick={() => handleActivateVote(vote.id)}
+                        className={styles.activateButton}
+                      >
+                        ▶️ Activar Votación
+                      </button>
+                    )}
+                    {/* --- FIN DEL BOTÓN --- */}
+
                   </li>
                 ))
               ) : (

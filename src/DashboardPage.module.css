@@ -304,3 +304,23 @@
 .judgeActions button:hover {
   color: var(--text-primary);
 }
+
+
+
+/* src/DashboardPage.module.css */
+/* ... (Estilos existentes) ... */
+
+.activateButton {
+  background-color: #22c55e; /* Verde */
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-weight: 500;
+  margin-top: 1rem;
+}
+
+.activateButton:hover {
+  background-color: #16a34a;
+}
