@@ -324,3 +324,19 @@
 .activateButton:hover {
   background-color: #16a34a;
 }
+
+.finishButton {
+  background-color: #ef4444; /* Rojo */
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-weight: 500;
+  margin-top: 1rem;
+  margin-left: 0.5rem; /* Espacio si está junto a otro botón */
+}
+
+.finishButton:hover {
+  background-color: #dc2626;
+}

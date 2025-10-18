@@ -14,7 +14,8 @@ export default function DashboardPage() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [votes, setVotes] = useState([]);
   const [judges, setJudges] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Loading for initial data
+  const [loadingVotes, setLoadingVotes] = useState(false); // Specific loading for votes/judges when selecting event
 
   // States for Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   // Fetch initial data (user, events)
   useEffect(() => {
     const fetchInitialData = async () => {
+      setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         navigate('/auth');
@@ -57,16 +59,17 @@ export default function DashboardPage() {
   const handleRenameEvent = async (eventId, currentName) => {
     setOpenMenuId(null); // Close menu
     const newName = prompt('Ingresa el nuevo nombre para la sala:', currentName);
-    if (newName && newName !== currentName) {
+    if (newName && newName.trim() && newName !== currentName) {
       const { data, error } = await supabase
         .from('events')
-        .update({ name: newName })
+        .update({ name: newName.trim() })
         .eq('id', eventId)
         .select()
         .single();
 
       if (error) {
         alert('Error al renombrar la sala.');
+        console.error("Rename Event Error:", error);
       } else {
         setEvents(events.map(e => (e.id === eventId ? data : e)));
         if (selectedEvent?.id === eventId) {
@@ -98,6 +101,7 @@ export default function DashboardPage() {
         if (selectedEvent?.id === eventId) {
           setSelectedEvent(null); // Deselect if it was the active room
           setVotes([]);
+          setJudges([]); // Also clear judges list related to the selection
         }
       }
     }
@@ -106,7 +110,10 @@ export default function DashboardPage() {
   // Handle selecting an event from the sidebar
   const handleSelectEvent = async (event) => {
     setSelectedEvent(event);
-    setLoading(true); // Show loading while fetching related data
+    setLoadingVotes(true); // Show loading specifically for votes/judges area
+    setVotes([]); // Clear previous votes immediately
+    setJudges([]); // Clear previous judges immediately
+
     // Load votes for the selected event
     const { data: votesData, error: votesError } = await supabase
       .from('votes')
@@ -127,7 +134,7 @@ export default function DashboardPage() {
         if(judgesError) console.error("Error fetching judges:", judgesError);
         setJudges(judgesData || []);
     }
-    setLoading(false);
+    setLoadingVotes(false); // Hide loading for votes/judges area
   };
 
   // Handle submitting the 'Create Vote' form
@@ -178,7 +185,7 @@ export default function DashboardPage() {
       // Maybe delete the created vote: await supabase.from('votes').delete().eq('id', voteData.id);
     } else {
       alert('¡Votación creada con éxito!');
-      setVotes(prevVotes => [voteData, ...prevVotes]); // Add to the beginning of the list
+      setVotes(prevVotes => [voteData, ...prevVotes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))); // Add and re-sort
       setIsModalOpen(false); // Close the modal
       // Reset form fields
       setVoteTitle('');
@@ -241,17 +248,17 @@ export default function DashboardPage() {
 
   // Handle deleting a judge
   const handleDeleteJudge = async (judgeId) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar a este juez? Si está asignado a votaciones, podría causar problemas.')) {
-      // Note: Check Supabase policies/triggers if judge deletion should be restricted
+    if (window.confirm('¿Estás seguro de que quieres eliminar a este juez? Si está asignado a votaciones activas, deberás reasignar.')) {
+      // Check if judge is assigned to any *active* votes first? Maybe too complex for now.
       const { error } = await supabase.from('judges').delete().eq('id', judgeId);
 
       if (error) {
-        alert('Error al eliminar el juez.');
+        alert('Error al eliminar el juez. Podría estar vinculado a datos existentes.');
         console.error('Delete Judge Error:', error);
       } else {
         // Remove the judge from the local state list
         setJudges(judges.filter(j => j.id !== judgeId));
-        // Also remove from selectedJudges if present
+        // Also remove from selectedJudges in the form if present
         setSelectedJudges(prev => prev.filter(id => id !== judgeId));
       }
     }
@@ -330,17 +337,20 @@ export default function DashboardPage() {
       // 4. Set a timer to automatically finish the vote
       console.log(`⏳ Vote ${voteId} activated. Will finish in ${duration} seconds.`);
       setTimeout(() => {
-        handleFinishVote(voteId);
+        // Pass the original duration for logging, though not strictly needed here
+        handleFinishVote(voteId, duration);
       }, duration * 1000); // Convert seconds to milliseconds
     } else {
         // Maybe the vote wasn't 'pending' anymore
         console.warn(`Vote ${voteId} could not be activated (maybe status was not 'pending'?)`);
+        // Optionally fetch votes again to ensure sync
+        // handleSelectEvent(selectedEvent);
     }
   };
 
   // Finish a specific vote (called by setTimeout or potentially manually)
-  const handleFinishVote = async (voteId) => {
-    console.log(`🏁 Attempting to finish vote ${voteId}`);
+  const handleFinishVote = async (voteId, duration = 'manual') => {
+    console.log(`🏁 Attempting to finish vote ${voteId} (Trigger: ${duration === 'manual' ? 'Manual' : `Timer (${duration}s)`})`);
     const { data, error } = await supabase
       .from('votes')
       .update({ status: 'finished' })
@@ -350,8 +360,8 @@ export default function DashboardPage() {
       .single();
 
     if (error) {
-      console.error('Error auto-finishing vote:', error);
-      // Handle error (e.g., notify admin, retry?)
+      console.error('Error finishing vote:', error);
+      alert(`Error al finalizar la votación ${voteId}`);
     } else if (data) {
       // Update local state if the update was successful
       console.log(`✅ Vote ${voteId} finished successfully.`);
@@ -361,9 +371,12 @@ export default function DashboardPage() {
     } else {
       // If data is null, it means the vote was likely already finished or wasn't active.
       console.log(`ℹ️ Vote ${voteId} was not 'active' when trying to finish.`);
+      // Optionally refresh state if needed, though realtime should handle it for others
+      // handleSelectEvent(selectedEvent);
     }
   };
 
+  // Show initial loading screen
   if (loading) return <div>Cargando panel...</div>;
 
   // --- JSX Rendering ---
@@ -375,7 +388,6 @@ export default function DashboardPage() {
           <button onClick={handleCreateEvent} className={styles.newEventButton}>
             + Nueva Sala
           </button>
-          {/* Potential search input could go here */}
         </div>
 
         {/* List of Events (Rooms) */}
@@ -383,26 +395,23 @@ export default function DashboardPage() {
           {events.map(event => (
             <li
               key={event.id}
-              className={styles.eventItem} // Combined styling for item hover
+              className={styles.eventItem}
             >
-              {/* Button to select the event */}
               <button
                 onClick={() => handleSelectEvent(event)}
                 className={`${styles.eventItemContent} ${selectedEvent?.id === event.id ? styles.active : ''}`}
               >
                 {event.name}
               </button>
-              {/* Options Button (3 dots) */}
               <button
                 className={styles.optionsButton}
                 onClick={(e) => {
-                  e.stopPropagation(); // Prevent event selection when clicking options
+                  e.stopPropagation();
                   setOpenMenuId(openMenuId === event.id ? null : event.id);
                 }}
               >
                 ⋮
               </button>
-              {/* Dropdown Menu */}
               {openMenuId === event.id && (
                 <DropdownMenu>
                   <button onClick={() => handleRenameEvent(event.id, event.name)}>Renombrar</button>
@@ -432,12 +441,14 @@ export default function DashboardPage() {
             <h2>{selectedEvent.name}</h2>
             {/* List of Votes within the selected event */}
             <ul className={styles.voteList}>
-              {votes.length > 0 ? (
+             {/* Show loading indicator specifically for votes */}
+             {loadingVotes ? ( <p>Cargando votaciones...</p>) :
+              (votes.length > 0 ? (
                 votes.map(vote => (
                   <li key={vote.id} className={styles.voteItem}>
                     <h3>{vote.title}</h3>
                     <p>Presentado por: {vote.student_presenter || 'N/A'}</p>
-                    <p>Estado: {vote.status}</p>
+                    <p>Estado: <strong>{vote.status}</strong></p>
                     <p style={{fontSize: '0.8rem', color: 'gray'}}>Duración: {vote.duration_seconds}s</p>
 
                     {/* Activate Button - Only shown if vote is 'pending' */}
@@ -449,10 +460,10 @@ export default function DashboardPage() {
                         ▶️ Activar Votación
                       </button>
                     )}
-                     {/* OPTIONAL: Manual Finish Button - Only shown if vote is 'active' */}
+                     {/* Manual Finish Button - Only shown if vote is 'active' */}
                      {vote.status === 'active' && (
                         <button
-                            onClick={() => handleFinishVote(vote.id)}
+                            onClick={() => handleFinishVote(vote.id, 'manual')} // Pass 'manual' flag
                             className={styles.finishButton} // Add style for this button
                         >
                             ⏹️ Finalizar Ahora
@@ -462,7 +473,7 @@ export default function DashboardPage() {
                 ))
               ) : (
                 <p>No hay votaciones en esta sala. ¡Crea una!</p>
-              )}
+              ))}
             </ul>
             {/* Floating Action Button to open the create/manage modal */}
             <button className={styles.fab} onClick={() => setIsModalOpen(true)}>+</button>
@@ -517,7 +528,7 @@ export default function DashboardPage() {
             <div className={styles.inputGroup}>
               <label>Asignar Jueces (Selecciona exactamente 3)</label>
               <div className={styles.judgeCheckboxGroup}>
-                {judges.map(judge => (
+                {judges.length > 0 ? judges.map(judge => (
                   <label key={judge.id}>
                     <input
                       type="checkbox"
@@ -528,8 +539,7 @@ export default function DashboardPage() {
                     />
                     {' '}{judge.name}
                   </label>
-                ))}
-                {judges.length === 0 && <p style={{fontSize: '0.8rem', color: 'gray'}}>Invita jueces en la otra pestaña.</p>}
+                )) : <p style={{fontSize: '0.8rem', color: 'gray'}}>Invita jueces en la otra pestaña.</p>}
               </div>
             </div>
             {/* Submit Button */}
@@ -555,7 +565,7 @@ export default function DashboardPage() {
             {/* List of Existing Judges */}
             <h4>Jueces Registrados</h4>
              <ul className={styles.judgeList}>
-                {judges.map(j => (
+                {judges.length > 0 ? judges.map(j => (
                   <li key={j.id} className={styles.judgeListItem}>
                     <span>{j.name}</span>
                     <div className={styles.judgeActions}>
@@ -563,8 +573,7 @@ export default function DashboardPage() {
                       <button onClick={() => handleDeleteJudge(j.id)} title="Eliminar juez">🗑️</button>
                     </div>
                   </li>
-                ))}
-                {judges.length === 0 && <p style={{fontSize: '0.8rem', color: 'gray', textAlign:'center'}}>No hay jueces registrados.</p>}
+                )) : <p style={{fontSize: '0.8rem', color: 'gray', textAlign:'center'}}>No hay jueces registrados.</p>}
               </ul>
           </div>
         )}
@@ -593,7 +602,6 @@ export default function DashboardPage() {
           </div>
         )}
       </Modal>
-
     </div>
   );
 }
