@@ -4,6 +4,7 @@ import AuthPage from './AuthPage';
 import DashboardPage from './DashboardPage';
 import ProtectedRoute from './ProtectedRoute';
 import JudgeInvitationPage from './JudgeInvitationPage';
+import SalaPage from './SalaPage';
 
 function App() {
   return (
@@ -11,6 +12,7 @@ function App() {
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/invitacion/:token" element={<JudgeInvitationPage />} /> {/* <-- Añade la nueva ruta */}
+        <Route path="/sala/:eventId" element={<SalaPage />} /> {/* <-- Añade la ruta de la sala */}
         
         {/* Rutas Protegidas */}
         <Route element={<ProtectedRoute />}>
